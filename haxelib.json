@@ -1,0 +1,11 @@
+{
+    "name": "flixel-screenrecorder",
+    "url": "https://github.com/ACrazyTown/flixel-screenrecorder",
+    "description": "TBA",
+    "tags": [],
+    "contributors": ["ACrazyTown"],
+    "classPath": "src",
+    "license": "MIT",
+    "version": "0.0.0",
+    "releasenote": "TBA"
+}
