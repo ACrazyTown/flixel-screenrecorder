@@ -25,7 +25,10 @@ class PlayState extends FlxState
 		add(text);
 
 		recorder = new FlxScreenRecorder();
-		recorder.start(H264, 30);
+		recorder.start({
+			videoCodec: H264,
+			crf: 30
+		});
 		add(recorder);
 	}
 
@@ -35,6 +38,8 @@ class PlayState extends FlxState
 
 		timer += elapsed;
 		text.text = '$timer';
+
+		recorder.captureFrame();
 
 		if (timer >= 5)
 		{

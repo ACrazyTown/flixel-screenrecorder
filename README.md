@@ -8,3 +8,4 @@ WIP
 - [ ] Allow recording audio
 - [ ] Don't rely on global FFMPEG
 - [ ] Additional customization
+- [ ] Handle dropped frames
