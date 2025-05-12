@@ -1,9 +1,9 @@
 package flixel.addons.plugin.screenrecorder;
 
-import lime.graphics.opengl.GL;
-import haxe.io.Bytes;
 import flixel.FlxBasic;
 import flixel.FlxG;
+import haxe.io.Bytes;
+import haxe.io.UInt8Array;
 import lime.graphics.Image;
 import sys.io.Process;
 
@@ -18,7 +18,11 @@ class FlxScreenRecorder extends FlxBasic
 
     var ffmpegPath:String = "ffmpeg";
 
-    var frameBuffer:Bytes;
+    var canWork:Bool = true;
+
+    var frameBuffer:UInt8Array;
+
+    var hardware:Bool;
 
     /**
      * Creates a new FlxScreenRecorder instance.
@@ -30,7 +34,16 @@ class FlxScreenRecorder extends FlxBasic
         super();
 
         this.ffmpegPath = ffmpegPath ?? getFFMPEGPath();
-        frameBuffer = Bytes.alloc(width * height * 4);
+        if (this.ffmpegPath == null)
+        {
+            FlxG.log.error("[FlxScreenRecorder] Could not find an installation of FFMPEG!");
+            canWork = false;
+        }
+
+        hardware = FlxG.stage.window.context.attributes.hardware;
+        if (hardware)
+            frameBuffer = new UInt8Array(width * height * 4);
+            //frameBuffer = Bytes.alloc(width * height * 4);
 
         FlxG.stage.window.application.onExit.add(onLimeApplicationExit);
     }
@@ -54,6 +67,9 @@ class FlxScreenRecorder extends FlxBasic
      */
     public function start(params:FlxScreenRecordParams):Void
     {
+        if (!canWork)
+            return;
+
         var width:Int = params.width ?? FlxG.stage.window.width;
         var height:Int = params.height ?? FlxG.stage.window.height;
 
@@ -62,7 +78,6 @@ class FlxScreenRecorder extends FlxBasic
         var crf:Int = params.crf ?? 23;
 
         var output:String = params.output ?? 'flxscreenrecorder_${DateTools.format(Date.now(), "%Y%m%d%H%M%S")}';
-        output += getCodecExtension(codec);
 
         try {
             process = new Process(ffmpegPath, 
@@ -75,7 +90,7 @@ class FlxScreenRecorder extends FlxBasic
                 "-i", "-",                                             // Set the input to be stdin
                 "-c:v", codec,                                         // Set the video codec
                 "-crf", '$crf',                                        // Set the crf quality
-                'flxscreenrecorder_output.${getCodecExtension(codec)}' // Set output filename
+                '$output.${getCodecExtension(codec)}' // Set output filename
             ], false);
         }
         catch (e)
@@ -88,15 +103,30 @@ class FlxScreenRecorder extends FlxBasic
 
     public function captureFrame():Void
     {
+        if (!canWork)
+            return;
+
         if (recording && process != null)
         {
-            FlxG.stage.window.context.gl.readPixels(0, 0, width, height, GL.RGBA, GL.UNSIGNED_BYTE, frameBuffer);
-            process.stdin.write(frameBuffer);
+            // TODO: Investigate why this leads to invalid video files
+            // if (hardware)
+            // {
+            //     var gl = FlxG.stage.window.context.gl;
+            //     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, frameBuffer);
+            //     process.stdin.write(frameBuffer.view.buffer);
+            // }
+            // else
+            {
+                process.stdin.write(FlxG.stage.window.readPixels().buffer.data.buffer);
+            }
         }
     }
 
     public function stop():Void
     {
+        if (!canWork)
+            return;
+
         // trace(process.stdout.readLine());
         process?.close();
         process = null;
@@ -109,11 +139,18 @@ class FlxScreenRecorder extends FlxBasic
         // Sys.command(Sys.systemName() == "Windows" ? "where" : "which", ["ffmpeg"]);
         var command:String = Sys.systemName() == "Windows" ? "where" : "which";
         var ffmpegFinder:Process = new Process(command, ["ffmpeg"]);
+        var globalFFMPEGPath:Null<String> = null;
+
+        try {
+            globalFFMPEGPath = ffmpegFinder.stdout.readLine();
+        } 
+        catch (e) {}
+        
         var code:Int = ffmpegFinder.exitCode();
 
-        if (code != 0)
+        if (code == 0 && globalFFMPEGPath != null)
         {
-            // 
+            return globalFFMPEGPath;
         }
 
         return null;

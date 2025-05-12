@@ -24,7 +24,7 @@ class PlayState extends FlxState
 		text.screenCenter();
 		add(text);
 
-		recorder = new FlxScreenRecorder();
+		recorder = new FlxScreenRecorder("ffmpeg");
 		recorder.start({
 			videoCodec: H264,
 			crf: 30
