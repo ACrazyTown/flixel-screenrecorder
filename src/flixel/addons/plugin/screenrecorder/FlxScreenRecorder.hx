@@ -3,8 +3,8 @@ package flixel.addons.plugin.screenrecorder;
 import flixel.FlxBasic;
 import flixel.FlxG;
 import haxe.io.Bytes;
-import haxe.io.UInt8Array;
 import lime.graphics.Image;
+import lime.utils.UInt8Array;
 import sys.io.Process;
 
 class FlxScreenRecorder extends FlxBasic
@@ -14,13 +14,12 @@ class FlxScreenRecorder extends FlxBasic
 
     var width:Int;
     var height:Int;
-    var framerate:Float;
 
     var ffmpegPath:String = "ffmpeg";
 
     var canWork:Bool = true;
 
-    var frameBuffer:UInt8Array;
+    var frameBuffer:Bytes;
 
     var hardware:Bool;
 
@@ -41,9 +40,9 @@ class FlxScreenRecorder extends FlxBasic
         }
 
         hardware = FlxG.stage.window.context.attributes.hardware;
-        if (hardware)
-            frameBuffer = new UInt8Array(width * height * 4);
             //frameBuffer = Bytes.alloc(width * height * 4);
+
+        trace(frameBuffer);
 
         FlxG.stage.window.application.onExit.add(onLimeApplicationExit);
     }
@@ -70,8 +69,8 @@ class FlxScreenRecorder extends FlxBasic
         if (!canWork)
             return;
 
-        var width:Int = params.width ?? FlxG.stage.window.width;
-        var height:Int = params.height ?? FlxG.stage.window.height;
+        width = params.width ?? FlxG.stage.window.width;
+        height = params.height ?? FlxG.stage.window.height;
 
         var framerate:Float = params.framerate ?? FlxG.stage.window.frameRate;
         var codec:VideoCodec = params.videoCodec ?? H264;
@@ -80,7 +79,7 @@ class FlxScreenRecorder extends FlxBasic
         var output:String = params.output ?? 'flxscreenrecorder_${DateTools.format(Date.now(), "%Y%m%d%H%M%S")}';
 
         try {
-            process = new Process(ffmpegPath, 
+            var args:Array<String> = 
             [
                 "-y",                                                  // Overwrite file
                 "-f", "rawvideo",                                      // Set input file format to be raw video
@@ -88,15 +87,35 @@ class FlxScreenRecorder extends FlxBasic
                 "-s", '${width}x${height}',                            // Set the input size
                 "-r", '$framerate',                                    // Set the input framerate
                 "-i", "-",                                             // Set the input to be stdin
-                "-c:v", codec,                                         // Set the video codec
-                "-crf", '$crf',                                        // Set the crf quality
-                '$output.${getCodecExtension(codec)}' // Set output filename
-            ], false);
+            ];
+
+            // glReadPixels() returns an upside down image, instead of correcting it
+            // on the Haxe side we'll just tell FFMPEG to accept it properly
+            if (hardware)
+            {
+                args.push("-vf");
+                args.push("vflip");
+            }
+
+            // Set codec & quality
+            args.push("-c:v");
+            args.push(codec);
+            args.push("-crf");
+            args.push(Std.string(crf));
+
+            // Set output file
+            args.push('$output.${getCodecExtension(codec)}');
+
+            process = new Process(ffmpegPath, args, false);
+
         }
         catch (e)
         {
             FlxG.log.error('[FlxScreenRecorder] Failed to open FFMPEG: ${e.message}');
         }
+
+        if (hardware && frameBuffer == null)
+            frameBuffer = Bytes.alloc(width * height * 4);
 
         recording = true;
     }
@@ -108,14 +127,13 @@ class FlxScreenRecorder extends FlxBasic
 
         if (recording && process != null)
         {
-            // TODO: Investigate why this leads to invalid video files
-            // if (hardware)
-            // {
-            //     var gl = FlxG.stage.window.context.gl;
-            //     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, frameBuffer);
-            //     process.stdin.write(frameBuffer.view.buffer);
-            // }
-            // else
+            if (hardware)
+            {
+                var gl = FlxG.stage.window.context.gl;
+                gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, frameBuffer);
+                process.stdin.write(frameBuffer);
+            }
+            else
             {
                 process.stdin.write(FlxG.stage.window.readPixels().buffer.data.buffer);
             }
